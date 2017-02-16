@@ -78,9 +78,9 @@ const reminders = pipe(
 	join( '\n' )
 );
 
-const server = micro( async (req, res) => {
-	res.writeHead( 200 )
-	res.end( reminders() )
-} );
+const server = micro( ( req, res ) => {
+	res.writeHead( 200 );
+	res.end( reminders() );
+});
 
 server.listen( 3000 );
