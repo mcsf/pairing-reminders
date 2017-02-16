@@ -1,6 +1,6 @@
 const micro = require( 'micro' );
-const { always, concat, join, map, pipe, range, take } = require( 'ramda' );
-const { reject, shuffle } = require( 'lodash' );
+const { shuffle } = require( 'lodash' );
+Object.assign( global, require( 'ramda' ) ); // so sue me, OK?
 
 const {
 	channelName,
@@ -16,71 +16,96 @@ const weekdays = [
 	'Friday',
 ];
 
-const getRandomMeetingsForTheWeek = () => {
-	let oneOnOnes = {};
+// Int -> Int
+const fact = memoize( n => product( range( 1, n + 1 ) ) );
 
-	do {
-		oneOnOnes = {};
-		teamMembers.map( ( name ) => {
-			oneOnOnes[ name ] = [];
-		} );
+// Int -> Int -> Int
+const comb = memoize( ( n, r ) => ( fact( n ) / ( fact( r ) * fact( n - r ) ) ) );
 
-		shuffle( teamMembers ).map( ( name ) => {
-			const possibleMeetings = shuffle( reject( teamMembers, ( member ) => (name === member) ) );
+// [a] -> [[a]]
+const tails = xs => xs.length
+	? [ xs, ...tails( tail( xs ) ) ]
+	: [ [] ];
 
-			possibleMeetings.map( ( member ) => {
-				if (
-					Math.max( // check if either team member has had enough meetings for the week.
-						oneOnOnes[ name ].length,
-						oneOnOnes[ member ].length
-					) >= oneOnOnesPerWeek
-					|| oneOnOnes[ name ].indexOf( member ) !== - 1 // crosscheck if member and name already have a meeting
-					|| oneOnOnes[ member ].indexOf( name ) !== - 1
-				) {
-					return;
-				}
+// not very functional, since it implies `fn` is not referentially transparent
+// (b -> Bool) -> (a -> b) -> a -> b
+const retryUntil = curry( ( predicate, fn, input ) => {
+	const result = fn( input );
+	return predicate( result )
+		? result
+		: retryUntil( predicate, fn, input );
+} );
 
-				oneOnOnes[ name ] = [ ...oneOnOnes[ name ], member ];
-				oneOnOnes[ member ] = [ ...oneOnOnes[ member ], name ];
-			} );
+// a -> [b] -> [(a, b)]
+const oneToAll = ( x, ys ) => ys.map( y => [ x, y ] );
 
-		} );
+// [a] -> [(a, a)]
+const allToAll = pipe(
+	tails,
+	map( converge( oneToAll, [ nth( 0 ), tail ] ) ),
+	unnest
+)
 
-		/**
-		 * Because of the algorithm randomness sometimes some people don't have enough meetings throughout the week.
-		 * This loop makes sure everyone has enough meetings for the week.
-		 */
-	} while ( reject( oneOnOnes, ( meetings ) => (
-		meetings.length < oneOnOnesPerWeek
-	) ).length != teamMembers.length );
+// [(a, a)] -> Bool
+const isEveryoneSet = pairs => pairs.length === (
+	comb( teamMembers.length, oneOnOnesPerWeek ) / 2 );
 
-	return oneOnOnes;
+// [(a, a)] -> [(a, a)]
+const filterMeetings = ( pairs ) => {
+	let counts = pipe(
+		map( member => [ member, 0 ] ),
+		fromPairs
+	)( teamMembers );
+
+	let inc = tap( member => counts[ member ]++ );
+
+	return pairs.filter( ( [ a, b ] ) =>
+		counts[ a ] < oneOnOnesPerWeek &&
+		counts[ b ] < oneOnOnesPerWeek &&
+		inc( a ) && inc( b ) // i'm cheating and setting state in a filter >:]
+	);
 };
 
-const convertMeetingsToText = ( meetings ) => (
-	teamMembers.map( ( member ) => (
-		`${member} is meeting with: ${meetings[ member ].join( ', ' )}`
-	) )
-);
+// [(a, a)] -> [(a, a)]
+const assignMeetings = retryUntil( isEveryoneSet,
+	pipe( shuffle, filterMeetings ) );
 
-const meetingsText = [ 'Meetings for the week!\n', ...convertMeetingsToText( getRandomMeetingsForTheWeek() ) , '\n' ];
-
+// [String]
 const timeslots = range( 11, 19 ).map( hh => `${hh}:00` );
 
+// [a] -> a
 const draw = pipe( shuffle, take( 1 ) );
 
+// _ -> String
 const reminders = pipe(
 	always( weekdays ),
 	shuffle,
 	take( cribbsPerWeek ),
-	map( day => `/remind ${channelName} Cribbs-Fonseca pairing! ${teamMembers.join()} at ${draw(timeslots)} on ${day}` ),
-	concat( meetingsText ),
+	map( day => `/remind ${channelName} Cribbs-Fonseca pairing! ${teamMembers.join( ' ' )} at ${draw( timeslots )} on ${day}` ),
 	join( '\n' )
 );
 
+// _ -> String
+const meetings = pipe(
+	always( teamMembers ),
+	allToAll,
+	assignMeetings,
+	map( ( [ a, b ] ) => `${a} and ${b}` ),
+	join( '\n' )
+);
+
+// _ -> String
+const main = converge( unapply( join( '\n' ) ), [
+	always( '# Slack reminders!' ),
+	reminders,
+	always( '' ),
+	always( '# Weekly pairings!' ),
+	meetings
+] );
+
 const server = micro( ( req, res ) => {
 	res.writeHead( 200 );
-	res.end( reminders() );
-});
+	res.end( main() )
+} );
 
 server.listen( 3000 );
