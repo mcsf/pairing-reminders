@@ -1,26 +1,31 @@
 const micro = require( 'micro' );
 const { shuffle } = require( 'lodash' );
-Object.assign( global, require( 'ramda' ) ); // so sue me, OK?
 
 const {
 	channelName,
-	cribbsPerWeek,
+	hoursRange,
 	oneOnOnesPerWeek,
 	teamMembers,
+	cribbsPerWeek,
+	weekdays,
 } = require( './config' );
 
-const weekdays = [
-	'Monday',
-	'Tuesday',
-	'Thursday',
-	'Friday',
-];
-
-// Int -> Int
-const fact = memoize( n => product( range( 1, n + 1 ) ) );
-
-// Int -> Int -> Int
-const comb = memoize( ( n, r ) => ( fact( n ) / ( fact( r ) * fact( n - r ) ) ) );
+const {
+	always,
+	converge,
+	curry,
+	fromPairs,
+	join,
+	map,
+	nth,
+	pipe,
+	range,
+	tail,
+	take,
+	tap,
+	unapply,
+	unnest
+} = require( 'ramda' );
 
 // [a] -> [[a]]
 const tails = xs => xs.length
@@ -44,11 +49,14 @@ const allToAll = pipe(
 	tails,
 	map( converge( oneToAll, [ nth( 0 ), tail ] ) ),
 	unnest
-)
+);
 
 // [(a, a)] -> Bool
-const isEveryoneSet = pairs => pairs.length === (
-	comb( teamMembers.length, oneOnOnesPerWeek ) / 2 );
+const isEveryoneSet = pairs => [
+	Math.floor( ( teamMembers.length / 2) * oneOnOnesPerWeek ),
+	pairs.length,
+	1 + Math.floor( ( teamMembers.length / 2) * oneOnOnesPerWeek ),
+].every( ( n, i, arr ) => ! i || ( arr[ i - 1 ] <= n ) );
 
 // [(a, a)] -> [(a, a)]
 const filterMeetings = ( pairs ) => {
@@ -71,7 +79,7 @@ const assignMeetings = retryUntil( isEveryoneSet,
 	pipe( shuffle, filterMeetings ) );
 
 // [String]
-const timeslots = range( 11, 19 ).map( hh => `${hh}:00` );
+const timeslots = range( ...hoursRange ).map( hh => `${hh}:00` );
 
 // [a] -> a
 const draw = pipe( shuffle, take( 1 ) );
@@ -81,7 +89,7 @@ const reminders = pipe(
 	always( weekdays ),
 	shuffle,
 	take( cribbsPerWeek ),
-	map( day => `/remind ${channelName} Cribbs-Fonseca pairing! ${teamMembers.join( ' ' )} at ${draw( timeslots )} on ${day}` ),
+	map( day => `/remind ${ channelName } Cribbs-Fonseca pairing! ${ teamMembers.join( ' ' ) } at ${ draw( timeslots ) } on ${ day }` ),
 	join( '\n' )
 );
 
@@ -90,7 +98,7 @@ const meetings = pipe(
 	always( teamMembers ),
 	allToAll,
 	assignMeetings,
-	map( ( [ a, b ] ) => `${a} and ${b}` ),
+	map( ( [ a, b ] ) => `${ a } and ${ b }` ),
 	join( '\n' )
 );
 

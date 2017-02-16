@@ -1,0 +1,13 @@
+module.exports = {
+	channelName: '',
+	weekdays: [
+		'Monday',
+		'Tuesday',
+		'Thursday',
+		'Friday',
+	],
+	teamMembers: [],
+	oneOnOnesPerWeek: 2,
+	cribbsPerWeek: 5,
+	hoursRange: [ 11, 19 ],
+};
