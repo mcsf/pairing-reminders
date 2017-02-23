@@ -10,4 +10,5 @@ module.exports = {
 	oneOnOnesPerWeek: 2,
 	cribbsPerWeek: 5,
 	hoursRange: [ 11, 19 ],
+	epoch: 0,
 };

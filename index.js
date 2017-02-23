@@ -1,12 +1,13 @@
 const micro = require( 'micro' );
-const { shuffle } = require( 'lodash' );
+const shuffleSeed = require( 'shuffle-seed' );
 
 const {
 	channelName,
+	cribbsPerWeek,
+	epoch,
 	hoursRange,
 	oneOnOnesPerWeek,
 	teamMembers,
-	cribbsPerWeek,
 	weekdays,
 } = require( './config' );
 
@@ -26,6 +27,12 @@ const {
 	unapply,
 	unnest
 } = require( 'ramda' );
+
+const WEEK_IN_MS = 7 * 24 * 3600 * 1000;
+const seed = Math.floor( ( Date.now() - epoch ) / WEEK_IN_MS );
+let count = 0;
+const shuffle = ( xs ) =>
+	shuffleSeed.shuffle( xs, seed + count++ );
 
 // [a] -> [[a]]
 const tails = xs => xs.length
@@ -112,6 +119,7 @@ const main = converge( unapply( join( '\n' ) ), [
 ] );
 
 const server = micro( ( req, res ) => {
+	count = 0;
 	res.writeHead( 200 );
 	res.end( main() )
 } );

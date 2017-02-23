@@ -9,8 +9,8 @@
   "author": "mcsf",
   "license": "ISC",
   "dependencies": {
-    "lodash": "^4.17.2",
     "micro": "latest",
-    "ramda": "^0.22.1"
+    "ramda": "^0.22.1",
+    "shuffle-seed": "^1.1.6"
   }
 }
